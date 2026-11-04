@@ -1,5 +1,5 @@
-use admirality;
+use admirality::add;
 
 fn main() {
-    println!("{}, Hello, world!", admirality::add(2, 4));
+    println!("{}, Hello, world!", add(2, 4));
 }

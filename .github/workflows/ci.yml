@@ -2,20 +2,49 @@ name: Rust CI
 
 on:
   push:
-    branches: [ "main" ]
+    paths: &rust_paths
+      - '**.rs'
+      - '**/Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/**'
+      - '.github/actions/**'
   pull_request:
-    branches: [ "main" ]
+    paths: *rust_paths
 
 jobs:
-  build-and-test:
+  formatting:
+    name: Formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-rust
         with:
-          toolchain: stable
-          
-      - name: Run tests
-        run: cargo test --verbose
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy-pedantic:
+    name: Clippy Pedantic Lints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-rust
+        with:
+          components: clippy
+      - run: cargo clippy --workspace --all-targets -- -W clippy::pedantic -D warnings
+
+  cargo-check:
+    name: Cargo Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-rust
+      - run: cargo check --workspace --all-targets
+
+  cargo-test:
+    name: Run Tests
+    needs: cargo-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-rust
+      - run: cargo test --workspace --all-targets --verbose

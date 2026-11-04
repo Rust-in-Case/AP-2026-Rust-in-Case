@@ -20,6 +20,7 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 pedantic = "deny"
+missing_panics_doc = "deny"
 
 [workspace.dependencies]
 geometry = { 

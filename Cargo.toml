@@ -20,6 +20,14 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 pedantic = "deny"
+missing_panics_doc = "deny"
 
 [workspace.dependencies]
-# deps.
+geometry = { 
+  git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git", 
+  package = "ap-2026-common-code-geometry"
+}
+shared = { 
+  git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git", 
+  package = "ap-2026-common-code-shared"
+}

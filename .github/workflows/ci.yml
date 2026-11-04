@@ -30,7 +30,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           components: clippy
-      - run: cargo clippy --workspace --all-targets -- -W clippy::pedantic -D warnings
+      - run: cargo clippy --workspace --all-targets
 
   cargo-check:
     name: Cargo Check

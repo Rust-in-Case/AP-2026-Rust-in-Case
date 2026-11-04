@@ -5,14 +5,36 @@ version = 4
 [[package]]
 name = "admirality"
 version = "0.1.0"
+dependencies = [
+ "ap-2026-common-code-geometry",
+ "ap-2026-common-code-shared",
+]
+
+[[package]]
+name = "ap-2026-common-code-geometry"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#524d15dc2cfdf028ba8dcfff8593e92e11690442"
+
+[[package]]
+name = "ap-2026-common-code-shared"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#524d15dc2cfdf028ba8dcfff8593e92e11690442"
 
 [[package]]
 name = "cartographer"
 version = "0.1.0"
+dependencies = [
+ "ap-2026-common-code-geometry",
+ "ap-2026-common-code-shared",
+]
 
 [[package]]
 name = "chart"
 version = "0.1.0"
+dependencies = [
+ "ap-2026-common-code-geometry",
+ "ap-2026-common-code-shared",
+]
 
 [[package]]
 name = "game"
@@ -28,7 +50,15 @@ dependencies = [
 [[package]]
 name = "island"
 version = "0.1.0"
+dependencies = [
+ "ap-2026-common-code-geometry",
+ "ap-2026-common-code-shared",
+]
 
 [[package]]
 name = "ship"
 version = "0.1.0"
+dependencies = [
+ "ap-2026-common-code-geometry",
+ "ap-2026-common-code-shared",
+]

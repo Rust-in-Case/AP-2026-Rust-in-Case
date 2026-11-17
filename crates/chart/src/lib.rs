@@ -80,6 +80,7 @@ impl From<MapError> for GenError {
 
 /// Protocol - 8
 impl Chart {
+    /// Creates a new chart
     fn new(map: Map, treasure: Cell) -> Chart {
         Chart {
             map,
@@ -88,6 +89,7 @@ impl Chart {
         }
     }
 
+    /// Generate a BTreeMap of <Cell,Terrain> cells
     fn cells_generate(radius: u32) -> BTreeMap<Cell, Terrain> {
         let rad: i64 = radius as i64;
         let neg_rad: i64 = -rad;
@@ -112,6 +114,7 @@ impl Chart {
         cells
     }
 
+    /// Islands implementations
     fn islands_get(rng: &mut ChaCha20Rng) -> Vec<Island> {
         vec![
             Island {
@@ -126,12 +129,8 @@ impl Chart {
         ]
     }
 
-    fn water_connected(map: &Map, start_cell: Cell) -> bool {
-        let mut visited: BTreeSet<Cell> = BTreeSet::new();
-        Self::water_connected_inn(map, start_cell, &mut visited)
-    }
-
-    fn water_connected_inn(map: &Map, start_cell: Cell, visited: &mut BTreeSet<Cell>) -> bool {
+    /// Used in step 6. of generate
+    fn water_connected(map: &Map, start_cell: Cell, visited: &mut BTreeSet<Cell>) -> bool {
         if map.is_land(start_cell) {
             return false;
         }
@@ -142,8 +141,37 @@ impl Chart {
 
         start_cell
             .ring(1)
-            .filter(|c| map.contains(c.clone()) && !map.is_land(c.clone()))
-            .all(|c| Self::water_connected_inn(map, c, visited))
+            .filter(|c| {
+                map.contains(c.clone())
+                    && !map.is_land(c.clone())
+                    && map.terrain(c.clone()).is_some_and(|t| t == Terrain::Rock)
+            })
+            .all(|c| Self::water_connected(map, c, visited))
+    }
+
+    fn _print_debug(map: &Map) {
+        let radius = map.radius().cast_signed();
+
+        for q in -radius..radius {
+            for r in -radius..radius {
+                let cell = Cell { q, r };
+
+                if !map.contains(cell) {
+                    print!("  ")
+                } else {
+                    match map.terrain(cell) {
+                        Some(terr) => match terr {
+                            Terrain::Clear => print!("W "),
+                            Terrain::Rock => print!("R "),
+                            Terrain::Cliff => print!("C "),
+                            _ => print!(". "),
+                        },
+                        None => print!("? "),
+                    }
+                }
+            }
+            println!("");
+        }
     }
 
     /// Main - 2.3 - How a sea is made
@@ -175,9 +203,16 @@ impl Chart {
         let retries = 3;
 
         // 4. Place `cliff_count` cliffs (must not touch islands or sea corners/adjacent cells)
+        let corners = map.corners();
+        let mut excluded = BTreeSet::new();
+
+        for c in corners {
+            excluded.insert(c);
+            excluded.extend(c.ring(1));
+        }
+
         for _ in 0..params.cliff_count {
-            let corners = map.corners();
-            let candidates: Vec<Cell> = map.clear_cells().filter(|c| !corners.contains(c)).collect();
+            let candidates: Vec<Cell> = map.clear_cells().filter(|c| !excluded.contains(c)).collect();
 
             let cliff_cell = (0..retries).find_map(|_| {
                 let cliff_candidate = candidates.choose(&mut rng)?;
@@ -200,18 +235,21 @@ impl Chart {
         }
 
         // 5. Place `rock_count` rocks on clear water (never on corners or adjacent cells).
+        let corners = map.corners();
+        let mut excluded = BTreeSet::new();
+
+        for cell in corners {
+            excluded.insert(cell);
+            excluded.extend(cell.ring(1));
+        }
+
         for _ in 0..params.rock_count {
-            let corners = map.corners();
-            let candidates: Vec<Cell> = map.clear_cells().filter(|c| !corners.contains(c)).collect();
+            let candidates: Vec<Cell> = map.clear_cells().filter(|c| !excluded.contains(c)).collect();
 
             let rock_cell = (0..retries).find_map(|_| {
                 let rock_candidate = candidates.choose(&mut rng)?;
 
-                rock_candidate
-                    .ring(1)
-                    .filter(|c| map.contains(c.clone()))
-                    .all(|c| !map.is_land(c))
-                    .then_some(rock_candidate)
+                Some(rock_candidate)
             });
 
             let Some(rock_selected) = rock_cell else {
@@ -230,6 +268,7 @@ impl Chart {
                 q: -ap_radius.cast_signed(),
                 r: 0,
             },
+            &mut BTreeSet::new(),
         ) {
             return Err(GenError::WaterNotConnected);
         }

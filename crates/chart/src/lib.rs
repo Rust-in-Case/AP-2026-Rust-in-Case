@@ -2,7 +2,7 @@ use geometry::{Cell, Map, MapError, Terrain};
 use rand::{seq::IndexedRandom, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use shared::{IslandId, Params, Seed, ShipId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 mod facade {
     use shared::IslandId;
@@ -54,11 +54,11 @@ impl From<MapError> for GenError {
 
 /// Protocol - 8
 impl Chart {
-    fn new(map: Map) -> Chart {
+    fn new(map: Map, treasure: Cell) -> Chart {
         Chart {
             map,
             islands: vec![],
-            treasure: Cell { q: 0, r: 0 },
+            treasure,
         }
     }
 
@@ -98,6 +98,26 @@ impl Chart {
                 id: IslandId(rng.random::<u8>()),
             },
         ]
+    }
+
+    fn water_connected(map: &Map, start_cell: Cell) -> bool {
+        let mut visited: BTreeSet<Cell> = BTreeSet::new();
+        Self::water_connected_inn(map, start_cell, &mut visited)
+    }
+
+    fn water_connected_inn(map: &Map, start_cell: Cell, visited: &mut BTreeSet<Cell>) -> bool {
+        if map.is_land(start_cell) {
+            return false;
+        }
+
+        if !visited.insert(start_cell.clone()) {
+            return true;
+        }
+
+        start_cell
+            .ring(1)
+            .filter(|c| map.contains(c.clone()) && !map.is_land(c.clone()))
+            .all(|c| Self::water_connected_inn(map, c, visited))
     }
 
     /// Main - 2.3 - How a sea is made
@@ -174,17 +194,39 @@ impl Chart {
             map = Map::try_new(ap_radius, cells.clone())?;
         }
 
-        let chart = Chart::new(map);
-
         // 6. Connectivity Check: Verify clear water is fully connected without crossing rocks.
         // Otherwise, advance seed and retry.
-        todo!();
+        // TODO: Add errors and fix
+        Self::water_connected(
+            &map,
+            Cell {
+                q: -ap_radius.cast_signed(),
+                r: 0,
+            },
+        );
 
         // 7. Treasure Placement: Select clear water cell not adjacent to land/corners. Retry if impossible.
-        todo!();
+        let corners = map.corners();
+        let candidates: Vec<Cell> = map.clear_cells().filter(|c| !corners.contains(c)).collect();
+
+        let treasure_cand = (0..1).find_map(|_| {
+            let cand = candidates.choose(&mut rng)?;
+
+            cand.ring(1)
+                .filter(|c| map.contains(c.clone()))
+                .all(|c| !map.is_land(c))
+                .then_some(cand)
+        });
+
+        // TODO update err
+        let Some(treasure_cell) = treasure_cand else {
+            return Err(MapError::ErrRadius);
+        };
 
         // 8. Assign one CLUE to each Island (Section 4).
         todo!();
+
+        let chart = Chart::new(map, treasure_cell.clone());
 
         // 9. Solvability Check: Verify full clue intersection equals exactly 1 cell. Advance seed and retry if failed
         todo!();

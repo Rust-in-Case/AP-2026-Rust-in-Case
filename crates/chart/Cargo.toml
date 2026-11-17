@@ -11,3 +11,5 @@ workspace = true
 [dependencies]
 geometry = { workspace = true }
 shared = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }

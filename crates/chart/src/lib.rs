@@ -1,8 +1,6 @@
 use geometry::{Cell, Map, MapError, Terrain};
-use rand::{
-    seq::{IndexedRandom, IteratorRandom},
-    Rng, RngExt, SeedableRng,
-};
+use rand::seq::IndexedRandom;
+use rand::{Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use shared::{IslandId, Params, Seed, ShipId};
 use std::collections::{BTreeMap, BTreeSet};

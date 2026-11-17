@@ -57,6 +57,7 @@ dependencies = [
  "ap-2026-common-code-shared",
  "rand",
  "rand_chacha",
+ "thiserror",
 ]
 
 [[package]]

@@ -6,11 +6,34 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mod facade {
     use shared::IslandId;
+    use thiserror::Error;
 
     pub struct ShipView {}
 
+    #[non_exhaustive]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub enum GenErrItem {
+        Island,
+        Cliff,
+        Rock,
+        Treasure,
+    }
+
+    #[non_exhaustive]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
     pub enum GenError {
-        Stub,
+        // Step 2
+        #[error("`archipelago_radius` <= `vision_range`.")]
+        VisionRangeTooHigh,
+        // Steps 3-5 and 7
+        #[error("Cannot place `{item:?}`, the sea might be too crowded.")]
+        CantPlace { item: GenErrItem },
+        // Step 6
+        #[error("The water is not connected by clear water alone.")]
+        WaterNotConnected,
+        // Step 9
+        #[error("The Clues do not narrow the sea down to a single cell.")]
+        Unsolvable,
     }
 
     pub enum Action {}
@@ -31,7 +54,9 @@ mod facade {
     }
 }
 
-use facade::{Action, Event, GenError, Island, Outcome, Rejection, ShipView, SpectatorView, ValidatedAction};
+use facade::{
+    Action, Event, GenErrItem, GenError, Island, Outcome, Rejection, ShipView, SpectatorView, ValidatedAction,
+};
 
 #[derive(Debug)]
 pub struct Chart {
@@ -40,14 +65,15 @@ pub struct Chart {
     treasure: Cell,
 }
 
+// Temporary fix
 impl From<MapError> for GenError {
     fn from(err: MapError) -> Self {
         match err {
-            MapError::ErrRadius => GenError::Stub,
-            MapError::ErrCellDup => GenError::Stub,
-            MapError::ErrCellOut => GenError::Stub,
-            MapError::ErrNumCell => GenError::Stub,
-            _ => GenError::Stub,
+            MapError::ErrRadius => GenError::VisionRangeTooHigh,
+            MapError::ErrCellDup => GenError::VisionRangeTooHigh,
+            MapError::ErrCellOut => GenError::VisionRangeTooHigh,
+            MapError::ErrNumCell => GenError::VisionRangeTooHigh,
+            _ => GenError::VisionRangeTooHigh,
         }
     }
 }
@@ -121,21 +147,20 @@ impl Chart {
     }
 
     /// Main - 2.3 - How a sea is made
-    pub fn generate(seed: Seed, params: &Params) -> Result<Chart, MapError> {
+    pub fn generate(seed: Seed, params: &Params) -> Result<Chart, GenError> {
         // 1. Seed reproducible random generator from the generation stream (not wall clock).
         let mut rng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(seed);
 
-        // TODO UPDATE ERR
         // 2. Create sea hex grid of `archipelago_radius` . Reject if radius ≤ `vision_range` .
         if params.archipelago_radius <= params.vision_range {
-            return Err(MapError::ErrRadius);
+            return Err(GenError::VisionRangeTooHigh);
         }
 
         let ap_radius = params.archipelago_radius;
         let mut cells = Self::cells_generate(ap_radius);
         let mut map = Map::try_new(ap_radius, cells.clone())?;
 
-        let possible_islands = Chart::islands_get(&mut rng);
+        let possible_islands = Self::islands_get(&mut rng);
         let num_islands = possible_islands.len() as u32;
 
         // TODO IMPLEMENT
@@ -146,6 +171,7 @@ impl Chart {
             // println!("{rand_island}");
             todo!();
         } */
+
         let retries = 3;
 
         // 4. Place `cliff_count` cliffs (must not touch islands or sea corners/adjacent cells)
@@ -153,21 +179,23 @@ impl Chart {
             let corners = map.corners();
             let candidates: Vec<Cell> = map.clear_cells().filter(|c| !corners.contains(c)).collect();
 
-            let found = (0..retries).find_map(|_| {
-                let cand = candidates.choose(&mut rng)?;
+            let cliff_cell = (0..retries).find_map(|_| {
+                let cliff_candidate = candidates.choose(&mut rng)?;
 
-                cand.ring(1)
+                cliff_candidate
+                    .ring(1)
                     .filter(|c| map.contains(c.clone()))
                     .all(|c| !map.is_land(c))
-                    .then_some(cand)
+                    .then_some(cliff_candidate)
             });
 
-            // TODO update err
-            let Some(cand) = found else {
-                return Err(MapError::ErrRadius);
+            let Some(cliff_selected) = cliff_cell else {
+                return Err(GenError::CantPlace {
+                    item: GenErrItem::Cliff,
+                });
             };
 
-            cells.insert(cand.clone(), Terrain::Cliff);
+            cells.insert(cliff_selected.clone(), Terrain::Cliff);
             map = Map::try_new(ap_radius, cells.clone())?;
         }
 
@@ -176,57 +204,60 @@ impl Chart {
             let corners = map.corners();
             let candidates: Vec<Cell> = map.clear_cells().filter(|c| !corners.contains(c)).collect();
 
-            let found = (0..retries).find_map(|_| {
-                let cand = candidates.choose(&mut rng)?;
+            let rock_cell = (0..retries).find_map(|_| {
+                let rock_candidate = candidates.choose(&mut rng)?;
 
-                cand.ring(1)
+                rock_candidate
+                    .ring(1)
                     .filter(|c| map.contains(c.clone()))
                     .all(|c| !map.is_land(c))
-                    .then_some(cand)
+                    .then_some(rock_candidate)
             });
 
-            // TODO update err
-            let Some(cand) = found else {
-                return Err(MapError::ErrRadius);
+            let Some(rock_selected) = rock_cell else {
+                return Err(GenError::CantPlace { item: GenErrItem::Rock });
             };
 
-            cells.insert(cand.clone(), Terrain::Rock);
+            cells.insert(rock_selected.clone(), Terrain::Rock);
             map = Map::try_new(ap_radius, cells.clone())?;
         }
 
         // 6. Connectivity Check: Verify clear water is fully connected without crossing rocks.
         // Otherwise, advance seed and retry.
-        // TODO: Add errors and fix
-        Self::water_connected(
+        if !Self::water_connected(
             &map,
             Cell {
                 q: -ap_radius.cast_signed(),
                 r: 0,
             },
-        );
+        ) {
+            return Err(GenError::WaterNotConnected);
+        }
 
         // 7. Treasure Placement: Select clear water cell not adjacent to land/corners. Retry if impossible.
         let corners = map.corners();
         let candidates: Vec<Cell> = map.clear_cells().filter(|c| !corners.contains(c)).collect();
 
-        let treasure_cand = (0..1).find_map(|_| {
-            let cand = candidates.choose(&mut rng)?;
+        let treasure_cell = (0..1).find_map(|_| {
+            let treasure_candidate = candidates.choose(&mut rng)?;
 
-            cand.ring(1)
+            treasure_candidate
+                .ring(1)
                 .filter(|c| map.contains(c.clone()))
                 .all(|c| !map.is_land(c))
-                .then_some(cand)
+                .then_some(treasure_candidate)
         });
 
-        // TODO update err
-        let Some(treasure_cell) = treasure_cand else {
-            return Err(MapError::ErrRadius);
+        let Some(treasure_selected) = treasure_cell else {
+            return Err(GenError::CantPlace {
+                item: GenErrItem::Treasure,
+            });
         };
 
         // 8. Assign one CLUE to each Island (Section 4).
         todo!();
 
-        let chart = Chart::new(map, treasure_cell.clone());
+        let chart = Chart::new(map, treasure_selected.clone());
 
         // 9. Solvability Check: Verify full clue intersection equals exactly 1 cell. Advance seed and retry if failed
         todo!();

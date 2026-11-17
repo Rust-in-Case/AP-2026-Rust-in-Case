@@ -33,3 +33,4 @@ shared = {
 }
 rand = "0.10.4"
 rand_chacha = "0.10.0"
+thiserror = "2.0.21"

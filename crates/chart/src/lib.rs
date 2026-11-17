@@ -1,10 +1,14 @@
 use geometry::{Cell, Map, MapError, Terrain};
-use rand::{seq::IndexedRandom, RngExt, SeedableRng};
+use rand::{
+    seq::{IndexedRandom, IteratorRandom},
+    Rng, RngExt, SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 use shared::{IslandId, Params, Seed, ShipId};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod facade {
+    use geometry::Cell;
     use shared::IslandId;
     use thiserror::Error;
 
@@ -52,10 +56,50 @@ mod facade {
     pub struct Island {
         pub id: IslandId,
     }
+
+    #[non_exhaustive]
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+    pub enum Clue {
+        Within { centre: Cell, radius: u32 },
+        Beyond { centre: Cell, radius: u32 },
+        HalfPlane { axis: Axis, bound: Bound },
+        Nearer { a: Cell, b: Cell },
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+    pub enum Axis {
+        Q,
+        R,
+        S,
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+    pub enum Bound {
+        AtLeast(i32),
+        AtMost(i32),
+    }
+    impl Clue {
+        pub fn holds(self, cell: Cell) -> bool {
+            match self {
+                Clue::Within { centre, radius } => cell.distance(centre) <= radius,
+                Clue::Beyond { centre, radius } => cell.distance(centre) > radius,
+                Clue::HalfPlane { axis, bound } => {
+                    let v = match axis {
+                        Axis::Q => cell.q,
+                        Axis::R => cell.r,
+                        Axis::S => cell.s(),
+                    };
+                    match bound {
+                        Bound::AtLeast(k) => v >= k,
+                        Bound::AtMost(k) => v <= k,
+                    }
+                }
+                Clue::Nearer { a, b } => cell.distance(a) < cell.distance(b),
+            }
+        }
+    }
 }
 
 use facade::{
-    Action, Event, GenErrItem, GenError, Island, Outcome, Rejection, ShipView, SpectatorView, ValidatedAction,
+    Action, Clue, Event, GenErrItem, GenError, Island, Outcome, Rejection, ShipView, SpectatorView, ValidatedAction,
 };
 
 #[derive(Debug)]
@@ -115,7 +159,10 @@ impl Chart {
     }
 
     /// Islands implementations
-    fn islands_get(rng: &mut ChaCha20Rng) -> Vec<Island> {
+    fn islands_get<R>(rng: &mut R) -> Vec<Island>
+    where
+        R: Rng + Sized,
+    {
         vec![
             Island {
                 id: IslandId(rng.random::<u8>()),
@@ -147,6 +194,16 @@ impl Chart {
                     && map.terrain(c.clone()).is_some_and(|t| t == Terrain::Rock)
             })
             .all(|c| Self::water_connected(map, c, visited))
+    }
+
+    /// Generates a clue
+    fn clue_generate<R>(rng: &mut R, map: &Map, treasure: &Cell, max_dist: u32) -> Clue
+    where
+        R: Rng + Sized,
+    {
+        let variant = rng.random_range(0u8..=3);
+
+        todo!()
     }
 
     fn _print_debug(map: &Map) {

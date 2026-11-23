@@ -18,3 +18,4 @@ ship = { path = "../ship" }
 chart = { path = "../chart" }
 admirality = { path = "../admirality" }
 cartographer = { path = "../cartographer" }
+contractors = { workspace = true }

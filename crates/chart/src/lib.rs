@@ -1,13 +1,16 @@
-use geometry::{Cell, Map, MapError, Terrain};
+use contractors::clues::Clue;
+use contractors::geometry::{Cell, Map, Terrain};
+use contractors::shared::{IslandId, Params, Seed, ShipId};
 use rand::seq::IndexedRandom;
 use rand::{Rng, RngExt, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use shared::{IslandId, Params, Seed, ShipId};
 use std::collections::{BTreeMap, BTreeSet};
+pub mod map;
+
+use map::{MapErr, RicMap};
 
 mod facade {
-    use geometry::Cell;
-    use shared::IslandId;
+    use contractors::shared::{IslandId, Params, Seed, ShipId};
     use thiserror::Error;
 
     pub struct ShipView {}
@@ -55,182 +58,54 @@ mod facade {
         pub id: IslandId,
     }
 
-    #[non_exhaustive]
-    #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-    pub enum Clue {
-        Within { centre: Cell, radius: u32 },
-        Beyond { centre: Cell, radius: u32 },
-        HalfPlane { axis: Axis, bound: Bound },
-        Nearer { a: Cell, b: Cell },
-    }
-    #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-    pub enum Axis {
-        Q,
-        R,
-        S,
-    }
-    #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-    pub enum Bound {
-        AtLeast(i32),
-        AtMost(i32),
-    }
-    impl Clue {
-        pub fn holds(self, cell: Cell) -> bool {
-            match self {
-                Clue::Within { centre, radius } => cell.distance(centre) <= radius,
-                Clue::Beyond { centre, radius } => cell.distance(centre) > radius,
-                Clue::HalfPlane { axis, bound } => {
-                    let v = match axis {
-                        Axis::Q => cell.q,
-                        Axis::R => cell.r,
-                        Axis::S => cell.s(),
-                    };
-                    match bound {
-                        Bound::AtLeast(k) => v >= k,
-                        Bound::AtMost(k) => v <= k,
-                    }
-                }
-                Clue::Nearer { a, b } => cell.distance(a) < cell.distance(b),
-            }
-        }
+    pub trait Chart: Sized {
+        fn generate(seed: Seed, params: &Params) -> Result<Self, GenError>;
+
+        /// Decide whether an action is legal. The only way to obtain a ValidatedAction.
+        fn validate(&self, ship: ShipId, action: &Action) -> Result<ValidatedAction, Rejection>;
+
+        /// Apply an already validated action. Cannot fail.
+        fn apply(&mut self, action: ValidatedAction) -> Vec<Event>;
+
+        /// End of round: the round number advances and the Islands take their turn.
+        fn advance_round(&mut self) -> Vec<Event>;
+
+        /// What a Ship is permitted to see.
+        fn view_for(&self, ship: ShipId) -> ShipView;
+
+        /// What a spectator sees: everything.
+        fn spectator_view(&self) -> SpectatorView;
+
+        fn outcome(&self) -> Option<Outcome>;
     }
 }
 
-use facade::{
-    Action, Clue, Event, GenErrItem, GenError, Island, Outcome, Rejection, ShipView, SpectatorView, ValidatedAction,
+pub use facade::{
+    Action, Chart, Event, GenErrItem, GenError, Island, Outcome, Rejection, ShipView, SpectatorView, ValidatedAction,
 };
 
 #[derive(Debug)]
-pub struct Chart {
-    map: Map,
+pub struct RicChart<M: Map> {
+    map: M,
     islands: Vec<Island>,
     treasure: Cell,
 }
 
 // Temporary fix
-impl From<MapError> for GenError {
-    fn from(err: MapError) -> Self {
+impl From<MapErr> for GenError {
+    fn from(err: MapErr) -> Self {
         match err {
-            MapError::ErrRadius => GenError::VisionRangeTooHigh,
-            MapError::ErrCellDup => GenError::VisionRangeTooHigh,
-            MapError::ErrCellOut => GenError::VisionRangeTooHigh,
-            MapError::ErrNumCell => GenError::VisionRangeTooHigh,
+            MapErr::CellsNumber => GenError::VisionRangeTooHigh,
+            MapErr::CellsOutside => GenError::VisionRangeTooHigh,
             _ => GenError::VisionRangeTooHigh,
         }
     }
 }
 
 /// Protocol - 8
-impl Chart {
-    /// Creates a new chart
-    fn new(map: Map, treasure: Cell) -> Chart {
-        Chart {
-            map,
-            islands: vec![],
-            treasure,
-        }
-    }
-
-    /// Generate a BTreeMap of <Cell,Terrain> cells
-    fn cells_generate(radius: u32) -> BTreeMap<Cell, Terrain> {
-        let rad: i64 = radius as i64;
-        let neg_rad: i64 = -rad;
-
-        let mut cells: BTreeMap<Cell, Terrain> = BTreeMap::new();
-
-        for q in neg_rad..=rad {
-            let r_min = neg_rad.max(neg_rad.saturating_sub(q));
-            let r_max = rad.min(rad.saturating_sub(q));
-
-            for r in r_min..=r_max {
-                cells.insert(
-                    Cell {
-                        q: q as i32,
-                        r: r as i32,
-                    },
-                    Terrain::Clear,
-                );
-            }
-        }
-
-        cells
-    }
-
-    /// Islands implementations
-    fn islands_get<R>(rng: &mut R) -> Vec<Island>
-    where
-        R: Rng + Sized,
-    {
-        vec![
-            Island {
-                id: IslandId(rng.random::<u8>()),
-            },
-            Island {
-                id: IslandId(rng.random::<u8>()),
-            },
-            Island {
-                id: IslandId(rng.random::<u8>()),
-            },
-        ]
-    }
-
-    /// Used in step 6. of generate
-    fn water_connected(map: &Map, start_cell: Cell, visited: &mut BTreeSet<Cell>) -> bool {
-        if map.is_land(start_cell) {
-            return false;
-        }
-
-        if !visited.insert(start_cell.clone()) {
-            return true;
-        }
-
-        start_cell
-            .ring(1)
-            .filter(|c| {
-                map.contains(c.clone())
-                    && !map.is_land(c.clone())
-                    && map.terrain(c.clone()).is_some_and(|t| t == Terrain::Rock)
-            })
-            .all(|c| Self::water_connected(map, c, visited))
-    }
-
-    /// Generates a clue
-    fn clue_generate<R>(rng: &mut R, map: &Map, treasure: &Cell, max_dist: u32) -> Clue
-    where
-        R: Rng + Sized,
-    {
-        let variant = rng.random_range(0u8..=3);
-
-        todo!()
-    }
-
-    fn _print_debug(map: &Map) {
-        let radius = map.radius().cast_signed();
-
-        for q in -radius..radius {
-            for r in -radius..radius {
-                let cell = Cell { q, r };
-
-                if !map.contains(cell) {
-                    print!("  ")
-                } else {
-                    match map.terrain(cell) {
-                        Some(terr) => match terr {
-                            Terrain::Clear => print!("W "),
-                            Terrain::Rock => print!("R "),
-                            Terrain::Cliff => print!("C "),
-                            _ => print!(". "),
-                        },
-                        None => print!("? "),
-                    }
-                }
-            }
-            println!("");
-        }
-    }
-
+impl<M: Map> Chart for RicChart<M> {
     /// Main - 2.3 - How a sea is made
-    pub fn generate(seed: Seed, params: &Params) -> Result<Chart, GenError> {
+    fn generate(seed: Seed, params: &Params) -> Result<Self, GenError> {
         // 1. Seed reproducible random generator from the generation stream (not wall clock).
         let mut rng: ChaCha20Rng = ChaCha20Rng::seed_from_u64(seed);
 
@@ -241,7 +116,7 @@ impl Chart {
 
         let ap_radius = params.archipelago_radius;
         let mut cells = Self::cells_generate(ap_radius);
-        let mut map = Map::try_new(ap_radius, cells.clone())?;
+        let mut map = RicMap::init(ap_radius, cells.clone())?;
 
         let possible_islands = Self::islands_get(&mut rng);
         let num_islands = possible_islands.len() as u32;
@@ -286,7 +161,7 @@ impl Chart {
             };
 
             cells.insert(cliff_selected.clone(), Terrain::Cliff);
-            map = Map::try_new(ap_radius, cells.clone())?;
+            map = RicMap::init(ap_radius, cells.clone())?;
         }
 
         // 5. Place `rock_count` rocks on clear water (never on corners or adjacent cells).
@@ -312,7 +187,7 @@ impl Chart {
             };
 
             cells.insert(rock_selected.clone(), Terrain::Rock);
-            map = Map::try_new(ap_radius, cells.clone())?;
+            map = RicMap::init(ap_radius, cells.clone())?;
         }
 
         // 6. Connectivity Check: Verify clear water is fully connected without crossing rocks.
@@ -351,41 +226,143 @@ impl Chart {
         // 8. Assign one CLUE to each Island (Section 4).
         todo!();
 
-        let chart = Chart::new(map, treasure_selected.clone());
+        let chart = RicChart::new(map, treasure_selected.clone());
 
         // 9. Solvability Check: Verify full clue intersection equals exactly 1 cell. Advance seed and retry if failed
         todo!();
 
-        Ok(chart)
+        // Ok(chart)
     }
 
     /// Decide whether an action is legal. The only way to obtain a ValidatedAction.
-    pub fn validate(&self, ship: ShipId, action: &Action) -> Result<ValidatedAction, Rejection> {
+    fn validate(&self, ship: ShipId, action: &Action) -> Result<ValidatedAction, Rejection> {
         todo!()
     }
 
     /// Apply an already validated action. Cannot fail.
-    pub fn apply(&mut self, action: ValidatedAction) -> Vec<Event> {
+    fn apply(&mut self, action: ValidatedAction) -> Vec<Event> {
         todo!()
     }
 
     /// End of round: the round number advances and the Islands take their turn.
-    pub fn advance_round(&mut self) -> Vec<Event> {
+    fn advance_round(&mut self) -> Vec<Event> {
         todo!()
     }
 
     /// What a Ship is permitted to see.
-    pub fn view_for(&self, ship: ShipId) -> ShipView {
+    fn view_for(&self, ship: ShipId) -> ShipView {
         todo!()
     }
 
     /// What a spectator sees: everything.
-    pub fn spectator_view(&self) -> SpectatorView {
+    fn spectator_view(&self) -> SpectatorView {
         todo!()
     }
 
-    pub fn outcome(&self) -> Option<Outcome> {
+    fn outcome(&self) -> Option<Outcome> {
         todo!()
+    }
+}
+
+impl<M: Map> RicChart<M> {
+    /// Generate a BTreeMap of <Cell,Terrain> cells
+    fn cells_generate(radius: u32) -> BTreeMap<Cell, Terrain> {
+        let rad: i64 = radius as i64;
+        let neg_rad: i64 = -rad;
+
+        let mut cells: BTreeMap<Cell, Terrain> = BTreeMap::new();
+
+        for q in neg_rad..=rad {
+            let r_min = neg_rad.max(neg_rad.saturating_sub(q));
+            let r_max = rad.min(rad.saturating_sub(q));
+
+            for r in r_min..=r_max {
+                cells.insert(
+                    Cell {
+                        q: q as i32,
+                        r: r as i32,
+                    },
+                    Terrain::Clear,
+                );
+            }
+        }
+
+        cells
+    }
+
+    /// Islands implementations
+    fn islands_get<R: Rng + Sized>(rng: &mut R) -> Vec<Island> {
+        vec![
+            Island {
+                id: IslandId(rng.random::<u8>()),
+            },
+            Island {
+                id: IslandId(rng.random::<u8>()),
+            },
+            Island {
+                id: IslandId(rng.random::<u8>()),
+            },
+        ]
+    }
+
+    /// Used in step 6. of generate
+    fn water_connected(map: &impl Map, start_cell: Cell, visited: &mut BTreeSet<Cell>) -> bool {
+        if map.is_land(start_cell) {
+            return false;
+        }
+
+        if !visited.insert(start_cell.clone()) {
+            return true;
+        }
+
+        start_cell
+            .ring(1)
+            .filter(|c| {
+                map.contains(c.clone())
+                    && !map.is_land(c.clone())
+                    && map.terrain(c.clone()).is_some_and(|t| t == Terrain::Rock)
+            })
+            .all(|c| Self::water_connected(map, c, visited))
+    }
+
+    /// Generates a clue
+    fn clue_generate<R: Rng + Sized>(rng: &mut R, map: &impl Map, treasure: &Cell, max_dist: u32) -> Clue {
+        let variant = rng.random_range(0u8..=3);
+
+        todo!()
+    }
+
+    fn _print_debug(map: &impl Map) {
+        let radius = map.radius().cast_signed();
+
+        for q in -radius..radius {
+            for r in -radius..radius {
+                let cell = Cell { q, r };
+
+                if !map.contains(cell) {
+                    print!("  ")
+                } else {
+                    match map.terrain(cell) {
+                        Some(terr) => match terr {
+                            Terrain::Clear => print!("W "),
+                            Terrain::Rock => print!("R "),
+                            Terrain::Cliff => print!("C "),
+                            _ => print!(". "),
+                        },
+                        None => print!("? "),
+                    }
+                }
+            }
+            println!("");
+        }
+    }
+
+    fn new(map: M, treasure: Cell) -> Self {
+        Self {
+            map,
+            islands: vec![],
+            treasure,
+        }
     }
 }
 

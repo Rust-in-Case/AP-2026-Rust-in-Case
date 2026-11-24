@@ -6,34 +6,100 @@ version = 4
 name = "admirality"
 version = "0.1.0"
 dependencies = [
- "ap-2026-common-code-geometry",
- "ap-2026-common-code-shared",
+ "ap-2026-common-code",
 ]
+
+[[package]]
+name = "ap-2026-common-code"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+dependencies = [
+ "ap-2026-common-code-clues",
+ "ap-2026-common-code-conformance",
+ "ap-2026-common-code-geometry",
+ "ap-2026-common-code-messages",
+ "ap-2026-common-code-shared",
+ "ap-2026-common-code-shiptrait",
+ "ap-2026-common-code-views",
+ "ap-2026-common-code-wind",
+]
+
+[[package]]
+name = "ap-2026-common-code-clues"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+dependencies = [
+ "ap-2026-common-code-geometry",
+]
+
+[[package]]
+name = "ap-2026-common-code-conformance"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
 
 [[package]]
 name = "ap-2026-common-code-geometry"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#524d15dc2cfdf028ba8dcfff8593e92e11690442"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+dependencies = [
+ "ap-2026-common-code-shared",
+ "thiserror",
+]
+
+[[package]]
+name = "ap-2026-common-code-messages"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
 
 [[package]]
 name = "ap-2026-common-code-shared"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#524d15dc2cfdf028ba8dcfff8593e92e11690442"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+
+[[package]]
+name = "ap-2026-common-code-shiptrait"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+
+[[package]]
+name = "ap-2026-common-code-views"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+
+[[package]]
+name = "ap-2026-common-code-wind"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+dependencies = [
+ "ap-2026-common-code-geometry",
+ "ap-2026-common-code-shared",
+ "rand",
+]
 
 [[package]]
 name = "cartographer"
 version = "0.1.0"
 dependencies = [
- "ap-2026-common-code-geometry",
- "ap-2026-common-code-shared",
+ "ap-2026-common-code",
 ]
 
 [[package]]
 name = "chart"
 version = "0.1.0"
 dependencies = [
- "ap-2026-common-code-geometry",
- "ap-2026-common-code-shared",
+ "ap-2026-common-code",
+ "rand",
+ "rand_chacha",
+ "thiserror",
+]
+
+[[package]]
+name = "cpufeatures"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -41,6 +107,7 @@ name = "game"
 version = "0.1.0"
 dependencies = [
  "admirality",
+ "ap-2026-common-code",
  "cartographer",
  "chart",
  "island",
@@ -51,14 +118,12 @@ dependencies = [
 name = "island"
 version = "0.1.0"
 dependencies = [
- "ap-2026-common-code-geometry",
- "ap-2026-common-code-shared",
+ "ap-2026-common-code",
 ]
 
 [[package]]
 name = "ship"
 version = "0.1.0"
 dependencies = [
- "ap-2026-common-code-geometry",
- "ap-2026-common-code-shared",
+ "ap-2026-common-code",
 ]

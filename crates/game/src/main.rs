@@ -1,5 +1,5 @@
 use cartographer::tui;
 
 fn main() {
-    tui();
+    let _ = tui();
 }

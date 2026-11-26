@@ -9,4 +9,12 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-contractors = { workspace = true }
+color-eyre = "0.6.3"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
+ratatui = "0.30.2"
+# contractors = { workspace = true }
+contractors = {
+  git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git", 
+  package = "ap-2026-common-code",
+  branch = "conformance-feat-chart"
+}

@@ -1,5 +1,5 @@
-use admirality::add;
+use cartographer::tui;
 
 fn main() {
-    println!("{}, Hello, world!", add(2, 4));
+    let _ = tui();
 }

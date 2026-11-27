@@ -169,8 +169,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "cartographer"
+name = "ap-2026-common-code-shiptrait"
 version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+
+[[package]]
+name = "ap-2026-common-code-views"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
+
+[[package]]
+name = "ap-2026-common-code-wind"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e#459091e5370ef5504bdb0a840ae6f680ad5708a2"
 dependencies = [
  "ap-2026-common-code 0.1.0 (git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git?rev=459091e)",
 ]

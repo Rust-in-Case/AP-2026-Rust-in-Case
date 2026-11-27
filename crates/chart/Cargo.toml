@@ -9,7 +9,11 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-contractors = { workspace = true }
+contractors = {
+  git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git", 
+  package = "ap-2026-common-code",
+  branch = "conformance-feat-chart"
+}
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 thiserror = { workspace = true }

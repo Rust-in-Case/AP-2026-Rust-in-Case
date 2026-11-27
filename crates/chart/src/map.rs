@@ -1,12 +1,13 @@
+use contractors::conformance::chart::MapUpdatableCells;
 use contractors::geometry::{Cell, Map, Terrain};
 use std::collections::BTreeMap;
+use thiserror::Error;
 
-pub type CellStorage = BTreeMap<Cell, Terrain>;
-
-#[derive(Debug)]
+/// A reference [`Map`], used in [`RefChart`]
+#[derive(Debug, PartialEq)]
 pub struct RicMap {
     radius: u32,
-    cells: CellStorage,
+    cells: BTreeMap<Cell, Terrain>,
 }
 
 impl Map for RicMap {
@@ -15,28 +16,21 @@ impl Map for RicMap {
     }
 
     fn contains(&self, cell: Cell) -> bool {
-        if let Some(_) = self.cells.get(&cell) {
-            true
-        } else {
-            false
-        }
+        self.cells.contains_key(&cell)
     }
 
     fn terrain(&self, cell: Cell) -> Option<Terrain> {
-        if let Some(terr) = self.cells.get(&cell) {
-            Some(terr.clone())
-        } else {
-            None
-        }
+        self.cells.get(&cell).copied()
     }
 
     fn is_land(&self, cell: Cell) -> bool {
         self.terrain(cell).is_some_and(|t| t.is_land())
     }
+
     fn is_water(&self, cell: Cell) -> bool {
         self.terrain(cell).is_some_and(|t| t.is_water())
     }
-    /// The six corners, in direction order (counter-clockwise, East is the first). Ship i starts on corner i.
+
     fn corners(&self) -> [Cell; 6] {
         let rad = self.radius().cast_signed();
         [
@@ -48,16 +42,16 @@ impl Map for RicMap {
             Cell { q: 0, r: rad },
         ]
     }
-    /// Every cell in the sea, in a fixed order. Clear water and rocks.
+
     fn water_cells(&self) -> impl Iterator<Item = Cell> + '_ {
         Cell { q: 0, r: 0 }
             .disc(self.radius())
             .filter(|&cell| self.is_water(cell))
     }
-    /// Water that is not a rock.
+
     fn clear_cells(&self) -> impl Iterator<Item = Cell> + '_ {
-        Cell { q: 0, r: 0 }.disc(self.radius()).filter(|&cell| {
-            if let Some(terr) = self.cells.get(&cell) {
+        Cell { q: 0, r: 0 }.disc(self.radius()).filter(|cell| {
+            if let Some(terr) = self.cells.get(cell) {
                 *terr == Terrain::Clear
             } else {
                 false
@@ -66,38 +60,64 @@ impl Map for RicMap {
     }
 }
 
-#[non_exhaustive]
-#[derive(Debug)]
-pub enum MapErr {
-    CellsNumber,
-    CellsOutside,
-}
-
 impl RicMap {
-    pub fn init(radius: u32, cells: CellStorage) -> Result<Self, MapErr> {
-        //the formula for the expected len is: (3 * radius * (radius + 1) + 1) as usize;
-        let expected_len: usize = radius
-            .saturating_add(1)
-            .saturating_mul(3)
-            .saturating_mul(radius)
-            .saturating_add(1) as usize;
+    /// Checks if the radius is `<= (i32::MAX / 2)`
+    pub fn radius_bound(radius: u32) -> bool {
+        radius <= (i32::MAX / 2) as u32
+    }
 
-        if cells.len() != expected_len {
-            return Err(MapErr::CellsNumber);
+    /// An empty [`RicMap`], useful for recovering errors
+    pub fn empty() -> Self {
+        Self {
+            radius: 0,
+            cells: BTreeMap::new(),
+        }
+    }
+
+    /// Creates a new [`RicMap`]
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`RicMapErr::InvalidRadius`] if the `radius` is not valid.
+    ///
+    /// Returns a [`RicMapErr::CellsOutside`] If there are [`Cell`]s outside `radius`
+    pub fn init(radius: u32, cells: BTreeMap<Cell, Terrain>) -> Result<Self, RicMapErr> {
+        if !Self::radius_bound(radius) {
+            return Err(RicMapErr::InvalidRadius);
         }
 
-        let radius_int: i64 = radius as i64;
+        let radius_int = i32::try_from(radius).map_err(|_| RicMapErr::InvalidRadius)?;
 
         let _ = cells
             .iter()
-            .all(|(c, _)| {
-                let q = c.q as i64;
-                let r = c.r as i64;
-
-                q <= radius_int && q >= -radius_int && r <= radius_int && r >= -radius_int
-            })
-            .ok_or(MapErr::CellsOutside);
+            .all(|(c, _)| c.q <= radius_int && c.q >= -radius_int && c.r <= radius_int && c.r >= -radius_int)
+            .ok_or(RicMapErr::CellsOutside);
 
         Ok(Self { radius, cells })
     }
+}
+
+impl MapUpdatableCells for RicMap {
+    type MapErr = RicMapErr;
+
+    fn update_cell(&mut self, cell: Cell, terrain: Terrain) -> Result<bool, Self::MapErr> {
+        if !self.contains(cell) {
+            return Err(RicMapErr::CellsOutside);
+        }
+
+        self.cells.insert(cell, terrain);
+        Ok(true)
+    }
+}
+
+/// Error types for [`RicMap`]
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum RicMapErr {
+    /// The radius exceeds `i32::MAX / 2`, or the expected cell count
+    /// cannot be computed using `u32` arithmetic.
+    #[error("invalid map radius")]
+    InvalidRadius,
+    /// Cells outside the map boundaries
+    #[error("cell outside map boundaries")]
+    CellsOutside,
 }
